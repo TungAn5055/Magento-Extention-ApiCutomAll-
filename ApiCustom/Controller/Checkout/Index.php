@@ -28,7 +28,8 @@ class Index extends Action
     protected $customerSession;
     protected $quoteFactory;
 
-    const COOKIE_NAME = 'token';
+    const COOKIE_NAME_TOKEN = 'token';
+    const COOKIE_NAME_QUOTE_MASK = 'mask_quote';
     const COOKIE_DURATION = 86400; // lifetime in seconds
 
     public function __construct(
@@ -59,9 +60,8 @@ class Index extends Action
     public function execute()
     {
 //        http://magento240.com/modernrugs/checkout?mask_quote=2GJfelpTUl3Fk81jCD40D8mi6rx37tgz
-        var_dump('aaaa');
-        var_dump($this->getRequest()->getParam('mask_quote'));
-        $maskQuote = $this->getRequest()->getParam('mask_quote');
+        $maskQuote = $this->cookieManager->getCookie(self::COOKIE_NAME_QUOTE_MASK);
+//        $maskQuote = $this->getRequest()->getParam('mask_quote');
         if (isset($maskQuote)) {
             $quoteMask = $this->quoteIdMaskFactory->create()->load($maskQuote, 'masked_id');
             $orderId = $quoteMask->getQuoteId();
@@ -69,30 +69,36 @@ class Index extends Action
             $this->checkoutSession->setQuoteId($orderId);
         }
 
-        $metadata = $this->cookieMetadataFactory
-            ->createPublicCookieMetadata()
-            ->setDuration(self::COOKIE_DURATION);
-        $this->cookieManager->setPublicCookie(
-            self::COOKIE_NAME,
-            'i920yiuotbd6xuzzptmsowtyheu05zr4',
-            $metadata
-        );
+//        $metadata = $this->cookieMetadataFactory
+//            ->createPublicCookieMetadata()
+//            ->setDuration(self::COOKIE_DURATION);
+//
+//
+//        $this->cookieManager->setPublicCookie(
+//            self::COOKIE_NAME_TOKEN,
+//            'i920yiuotbd6xuzzptmsowtyheu05zr4',
+//            $metadata
+//        );
+//
+//        $this->cookieManager->setPublicCookie(
+//            self::COOKIE_NAME_QUOTE_MASK,
+//            'i920yiuotbd6xuzzptmsowtyheu05zr4',
+//            $metadata
+//        );
 
-        var_dump(123);
 
-        $cookieToken = $this->cookieManager->getCookie(self::COOKIE_NAME);
-        var_dump($cookieToken);
+        $cookieToken = $this->cookieManager->getCookie(self::COOKIE_NAME_TOKEN);
 
         if ($cookieToken) {
             $customerId = $this->tokenModelFactory->create()->loadByToken($cookieToken)->getCustomerId();
             $quote = $this->quoteFactory->create()->loadByCustomer($customerId);
             if ($customerId && $quote->getId()) {
                 $this->customerSession->setCustomerId($customerId);
-                $this->checkoutSession->setQuoteId($orderId);
+                $this->checkoutSession->setQuoteId($quote->getId());
             }
         }
 
-//        return $this->_redirect('checkout/cart');
+        return $this->_redirect('checkout/cart');
         return $this->pageFactory->create();
     }
 }
