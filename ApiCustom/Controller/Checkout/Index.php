@@ -2,6 +2,7 @@
 
 namespace Modernrugs\ApiCustom\Controller\Checkout;
 
+use LDP\Customer\Helper\ExportCustomerConfig;
 use Magento\Customer\Model\Session as CustomerSession;
 use Magento\Framework\App\Action\Action;
 use Magento\Integration\Model\Oauth\TokenFactory as TokenModelFactory;
@@ -12,6 +13,7 @@ use Magento\Framework\View\Result\PageFactory;
 use Magento\Framework\App\Action\Context;
 use Magento\Framework\App\Cache\TypeListInterface;
 use Magento\Framework\Stdlib\CookieManagerInterface;
+use Modernrugs\Log\Helper\LoggerContainer;
 
 /**
  * Class Index
@@ -41,6 +43,7 @@ class Index extends Action
         CookieManagerInterface $cookieManager,
         QuoteFactory $quoteFactory,
         CustomerSession $customerSession,
+        LoggerContainer $logger,
         \Magento\Framework\Stdlib\Cookie\CookieMetadataFactory $cookieMetadataFactory,
         QuoteIdMaskFactory $quoteIdMaskFactory
     )
@@ -54,6 +57,8 @@ class Index extends Action
         $this->cookieManager = $cookieManager;
         $this->cookieMetadataFactory = $cookieMetadataFactory;
         $this->quoteFactory = $quoteFactory;
+
+        $this->logger = $logger->getLoggerAndSwitchTo(ExportCustomerConfig::CONTEXT_NAME_LOG_CONTAINER);
         return parent::__construct($context);
     }
 
