@@ -2,4 +2,35 @@
 <config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="urn:magento:framework:ObjectManager/etc/config.xsd">
     <preference for="Modernrugs\ApiCustom\Api\AddToCartInterface" type="Modernrugs\ApiCustom\Model\Api\AddToCart"/>
     <preference for="Magento\Quote\Model\ChangeQuoteControl" type="Modernrugs\ApiCustom\Model\ChangeQuoteControl" />
+
+    <!-- Config log handler for each types of export customer -->
+    <type name="Modernrugs\Log\Helper\LoggerContainer">
+        <arguments>
+            <argument name="loggerContainer" xsi:type="array">
+                <item name="csvExportLog" xsi:type="object">csvExportLog</item>
+            </argument>
+        </arguments>
+    </type>
+
+    <virtualType name="csvExportLog" type="Magento\Framework\Logger\Monolog">
+        <arguments>
+            <argument name="handlers" xsi:type="array">
+                <item name="report" xsi:type="object">csvExportLogHandlers</item>
+            </argument>
+        </arguments>
+    </virtualType>
+    <virtualType name="csvExportLogHandlers" type="Modernrugs\Log\Handler\LogHandler">
+        <arguments>
+            <argument name="fileName" xsi:type="string">Flow_Add_To_Cart.csv</argument>
+            <argument name="baseConfig" xsi:type="object">Modernrugs\Log\Helper\BaseConfig</argument>
+            <argument name="csvLineFormatter" xsi:type="object">Modernrugs\Log\Formatter\CsvLineFormatter</argument>
+        </arguments>
+    </virtualType>
+    <type name="Modernrugs\Log\Helper\BaseConfig">
+        <arguments>
+            <argument name="logContext" xsi:type="string">csvExportLog</argument>
+        </arguments>
+    </type>
+
+
 </config>

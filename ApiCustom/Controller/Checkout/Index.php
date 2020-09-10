@@ -2,7 +2,6 @@
 
 namespace Modernrugs\ApiCustom\Controller\Checkout;
 
-use LDP\Customer\Helper\ExportCustomerConfig;
 use Magento\Customer\Model\Session as CustomerSession;
 use Magento\Framework\App\Action\Action;
 use Magento\Integration\Model\Oauth\TokenFactory as TokenModelFactory;
@@ -57,13 +56,13 @@ class Index extends Action
         $this->cookieManager = $cookieManager;
         $this->cookieMetadataFactory = $cookieMetadataFactory;
         $this->quoteFactory = $quoteFactory;
-
-        $this->logger = $logger->getLoggerAndSwitchTo(ExportCustomerConfig::CONTEXT_NAME_LOG_CONTAINER);
+        $this->logger = $logger->getLoggerAndSwitchTo(LoggerContainer::CONTEXT_NAME_LOG_CONTAINER);
         return parent::__construct($context);
     }
 
     public function execute()
     {
+        $this->logger->info("Cron job Log is START");
 //        http://magento240.com/modernrugs/checkout?mask_quote=2GJfelpTUl3Fk81jCD40D8mi6rx37tgz
         $maskQuote = $this->cookieManager->getCookie(self::COOKIE_NAME_QUOTE_MASK);
 //        $maskQuote = $this->getRequest()->getParam('mask_quote');

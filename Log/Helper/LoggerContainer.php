@@ -6,6 +6,7 @@ use Psr\Log\LoggerInterface;
 
 class LoggerContainer
 {
+    const CONTEXT_NAME_LOG_CONTAINER = 'csvExportLog';
     /** @var  LoggerInterface[] $loggerContainer */
     protected $loggerContainer;
     /**
