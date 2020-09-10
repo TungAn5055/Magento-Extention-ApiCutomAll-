@@ -61,11 +61,14 @@ class AddToCart
     protected $cartRepository;
     protected $cartManagementInterface;
     protected $registry;
+    protected $zendClient;
     protected $quoteIdMaskFactory;
 
     const DEFAULT_WEBSITE = 1;
     const DEFAULT_STORE = 1;
     const DEFAULT_ATTRIBUTE = 'size_modernrugs';
+    const DEFAULT_URL_BASE = 'https://www.modernrugs.com/';
+    const DEFAULT_CATEGORY_ID = ['4', '7', '14'];
 
     /**
      * AddToCart constructor.
@@ -156,7 +159,7 @@ class AddToCart
      * @param $order
      * @return false|string
      */
-    public function getPost($product, $customer, $order)
+    public function getPost($product, $customer, $order, $maskQuote = null, $token = null)
     {
 //        $this->logger->info('Start Api Modernrugs!!!!!!!!!');
         $response = ['success' => false];
@@ -169,63 +172,13 @@ class AddToCart
                 return json_encode(['success' => true, 'message' => 'Order can not empty']);
             }
 
-            // add attribute
+            // check and add attribute
             if (isset($product['variations']) && isset($product['variations'][0]) && array_keys($product['variations'][0])) {
-                $attrListNotChecks = ['option', 'active', 'price'];
-                $attrListCustoms = ['vendor', 'designer', 'madeIn', 'quality', 'material', 'distressed', 'patterned', 'silk', 'transitional'];
-                $attFormatNames = [
-                    'sizeSku' => 'size_sku',
-                    'size' => 'size_modernrugs',
-                    'sale' => 'sale_modernrugs',
-                    'searchSize' => 'search_size',
-                    'aliasSize' => 'alias_size',
-                    'searchSizeFloor' => 'search_size_floor',
-                    'oldPrice' => 'old_price',
-                    'shippingLength' => 'shipping_length',
-                    'shippingWidth' => 'shipping_width',
-                    'shippingHeight' => 'shipping_height',
-                    'shippingWeight' => 'shipping_weight',
-                    'shippingType' => 'shipping_type',
-                    'origMap' => 'orig_map',
-                    'GS1' => 'gs1',
-                    'madeIn' => 'made_in',
-                ];
-
-                // create attribute
-                $listAttributes = array_merge(array_keys($product['variations'][0]), $attrListCustoms);
-                foreach ($listAttributes as $attr) {
-                    $attrCode = in_array($attr, array_keys($attFormatNames)) ? $attFormatNames[$attr] : $attr;
-                    if ($this->isProductAttributeExists($attrCode) == false && !in_array($attr, $attrListNotChecks)) {
-                        $eavSetup = $this->eavSetupFactory->create();
-                        $paramAttribute = $this->getDetailAttribute($attrCode, $product['variations']);
-                        $eavSetup->addAttribute(Product::ENTITY, $attrCode, $paramAttribute);
-                        $attributeId = $eavSetup->getAttributeId(Product::ENTITY, $attrCode);
-                        if ($attrCode == 'size_modernrugs' && count($product['variations']) > 0) {
-                            $option = $this->attributeOption;
-                            $attributeOptionLabel = $this->attributeOptionLabel;
-                            $attributeOptionManagement = $this->attributeOptionManagement;
-
-                            foreach ($product['variations'] as $key => $variation) {
-                                if (isset($variation['size'])) {
-                                    $option->setValue($variation['size']);
-                                    $attributeOptionLabel->setStoreId(self::DEFAULT_STORE);
-                                    $attributeOptionLabel->setLabel($variation['size']);
-                                    $option->setLabel($variation['size']);
-                                    $option->setStoreLabels([$attributeOptionLabel]);
-                                    $option->setSortOrder(0);
-                                    $option->setIsDefault(true);
-                                    $attributeOptionManagement->add(Product::ENTITY, $attributeId, $option);
-                                }
-                            }
-                        }
-                    }
-                    $this->eavConfig->clear();
-                }
+                $this->createAttribute($product);
             }
 
             // create product configurable
             if (!$this->product->getIdBySku($product['sku'])) {
-                // $this->logger->info('Product Exist');
                 $this->createProductConfigurable($product);
             }
 
@@ -243,23 +196,23 @@ class AddToCart
                 $productData = $this->productRepository->get($product['sku']);
                 if ($productData->getTypeId() == 'configurable') {
                     $children = $productData->getTypeInstance()->getUsedProducts($productData);
-                    $listChildrens = [];
+                    $listChildren = [];
                     $linkedProduct = [];
                     if (count($children) > 0) {
                         foreach ($children as $child) {
-                            array_push($listChildrens, $child->getID());
+                            array_push($listChildren, $child->getID());
                         }
                     }
                     if (isset($product['variations'])) {
                         foreach ($product['variations'] as $variation) {
                             $productId = $this->product->getIdBySku($variation['sizeSku']);
-                            if ($productId && !in_array($productId, $listChildrens)) {
+                            if ($productId && !in_array($productId, $listChildren)) {
                                 array_push($linkedProduct, $productId);
                             }
                         }
                     }
-                    // add option to product configuable
-                    $attributeId = $this->getAttributeIdByCode('size_modernrugs');
+                    // add option to product configurable
+                    $attributeId = $this->getAttributeIdByCode(self::DEFAULT_ATTRIBUTE);
                     if (count($linkedProduct) > 0 && $attributeId) {
                         $configurableAttributesData = [
                             "option" => [
@@ -287,139 +240,44 @@ class AddToCart
 
             // add customer
             if (!empty($customer) || !empty($customer['email'])) {
-                try {
-                    $isEmailNotExists = $this->customerAccountManagement->isEmailAvailable($customer['email'], Self::DEFAULT_WEBSITE);
-
-                    if ($isEmailNotExists) {
-                        // Preparing data for new customer
-                        $customerNew = $this->customerFactory->create();
-                        $customerNew->setWebsiteId(self::DEFAULT_WEBSITE);
-                        $customerNew->setEmail($customer['email']);
-                        $customerNew->setFirstname($customer['firstName']);
-                        $customerNew->setLastname($customer['lastName']);
-
-                        // address of customer
-                        $address = $this->dataAddressFactory->create();
-                        $address->setFirstname($customer['firstName']);
-                        $address->setLastname($customer['lastName']);
-                        $address->setTelephone($customer['phone']);
-                        $street[] = '1408 N 3rd st';
-                        $address->setStreet($street);
-                        $address->setCity($customer['city']);
-                        $address->setCountryId($customer['country']);
-                        $address->setPostcode($customer['zip']);
-                        if ($customer['state'] && $customer['country']) {
-                            $region = $this->region->loadByCode('CA', 'US');
-                            $regionId = $region->getId();
-                            $address->setRegionId($regionId);
-                        }
-                        $address->setIsDefaultShipping(1);
-                        $address->setIsDefaultBilling(1);
-                        $customerNew->setAddresses([$address]);
-
-                        // Save data
-                        $hashedPassword = $this->encryptorInterface->getHash($customer['email'], true);
-                        $this->customerRepository->save($customerNew, $hashedPassword);
-                    }
-                } catch (Exception $exception) {
-                }
+                $this->createCustomer($customer);
             }
 
             // get quote and add product to quote
-            //check and add customer
+            // check and add customer
             if (empty($customer) || empty($customer['email'])) {
-                $cartId = $this->cartManagementInterface->createEmptyCart(); //Create empty cart
+                if ($maskQuote != null) {
+                    $quoteMask = $this->quoteIdMaskFactory->create()->load($maskQuote, 'masked_id');
+                    $cartId = $quoteMask->getQuoteId();
+                } else {
+                    $cartId = $this->cartManagementInterface->createEmptyCart(); //Create empty cart
+                }
+
                 $quote = $this->cartRepository->get($cartId); // load empty cart quote
                 $quote->setStoreId(self::DEFAULT_STORE);
                 $quote->setCurrency();
                 if (!empty($order)) {
-                    foreach ($order as $data) {
-                        if (isset($data['sku']) && $product['sku'] && isset($product['variations']) && isset($data['variation']) && $data['qty']) {
-                            $productParent = $this->product->getIdBySku($product['sku']);
-                            // get attribute id and option id
-                            $optionId = null;
-                            $attributeId = $this->eavSetupFactory->create()->getAttributeId(Product::ENTITY, self::DEFAULT_ATTRIBUTE);
-                            $attribute = $this->eavConfig->getAttribute(Product::ENTITY, self::DEFAULT_ATTRIBUTE);
-                            if ($attribute->usesSource()) {
-                                foreach ($product['variations'] as $variation) {
-                                    if (isset($variation['option']) && $variation['option'] == $data['variation']) {
-                                        $optionId = $attribute->getSource()->getOptionId($variation['size']);
-                                    }
-                                }
-                            }
-                            //check product has in quote
-                            if ($optionId && $attributeId) {
-                                var_dump("todooo add cart");
-                                // add new product to cart
-                                $cart = $this->cart->setQuote($quote);
-                                $requestInfo = new \Magento\Framework\DataObject(
-                                    [
-                                        'product' => $productParent,
-                                        'selected_configurable_option' => 1,
-                                        'qty' => $data['qty'],
-                                        'super_attribute' => [
-                                            $attributeId => $optionId
-                                        ],
-                                    ]
-                                );
-                                $productModel = $this->productRepository->get($product['sku'], false, self::DEFAULT_STORE, true);
-                                $quote->addProduct($productModel, $requestInfo);
-                                $this->registry->register('modernrugs', 'user');
-                                $quote->save();
-                                $this->cartRepository->save($quote);
-                                $this->registry->unregister('modernrugs');
-
-                                $quoteIdMask = $this->quoteIdMaskFactory->create();
-                                $quoteIdMask->setQuoteId($quote->getId())
-                                    ->save();
-                            }
-
-                        }
-                    }
+                    $this->addProductToQuote($quote, $product, $order);
                 }
             } else {
                 try {
-                    $customer = $this->customerFactory->create()->setWebsiteId(self::DEFAULT_STORE)->loadByEmail($customer['email']);
+                    $customer = $this->customerRepository->get($customer['email'], self::DEFAULT_WEBSITE);
                     $customerId = $customer->getId();
-                    $quote = $this->quoteFactory->create()->loadByCustomer($customerId);
-                    if (!empty($order)) {
-                        foreach ($order as $data) {
-                            if (isset($data['sku']) && $product['sku'] && isset($product['variations']) && isset($data['variation']) && $data['qty']) {
-                                $productParent = $this->product->getIdBySku($product['sku']);
-                                // get attribute id and option id
-                                $optionId = null;
-                                $attributeId = $this->eavSetupFactory->create()->getAttributeId(Product::ENTITY, self::DEFAULT_ATTRIBUTE);
-                                $attribute = $this->eavConfig->getAttribute(Product::ENTITY, self::DEFAULT_ATTRIBUTE);
-                                if ($attribute->usesSource()) {
-                                    foreach ($product['variations'] as $variation) {
-                                        if (isset($variation['option']) && $variation['option'] == $data['variation']) {
-                                            $optionId = $attribute->getSource()->getOptionId($variation['size']);
-                                        }
-                                    }
-                                }
-                                //check product has in quote
-                                if ($optionId && $attributeId) {
-                                    var_dump("todooo add cart");
-                                    // add new product to cart
-                                    $cart = $this->cart->setQuote($quote);
-                                    $requestInfo = new \Magento\Framework\DataObject(
-                                        [
-                                            'product' => $productParent,
-                                            'selected_configurable_option' => 1,
-                                            'qty' => $data['qty'],
-                                            'super_attribute' => [
-                                                $attributeId => $optionId
-                                            ],
-                                        ]
-                                    );
-                                    $productModel = $this->productRepository->get($product['sku'], false, self::DEFAULT_STORE, true);
-                                    $quote->addProduct($productModel, $requestInfo);
-                                    $this->registry->register('modernrugs', 'user');
-                                    $quote->save();
-                                    $this->cartRepository->save($quote);
-                                    $this->registry->unregister('modernrugs');
-                                }
-                            }
+                    $quoteId = $this->quoteFactory->create()->getCollection()
+                        ->addFieldToSelect('entity_id')
+                        ->addFieldToFilter('customer_id', $customerId)
+                        ->addFieldToFilter('customer_id', $customerId);
+                    if (!empty($order) && $customerId) {
+                        if (count($quoteId)) {
+                            $quote = $this->quoteFactory->create()->loadByCustomer($customerId);
+                            $this->addProductToQuote($quote, $product, $order);
+                        } else {
+                            $cartId = $this->cartManagementInterface->createEmptyCart(); //Create empty cart
+                            $quoteNew = $this->cartRepository->get($cartId); // load empty cart quote
+                            $quoteNew->setStoreId(self::DEFAULT_STORE);
+                            $quoteNew->setCurrency();
+                            $quoteNew->assignCustomer($customer);
+                            $this->addProductToQuote($quoteNew, $product, $order);
                         }
                     }
                 } catch (\Exception $e) {
@@ -438,20 +296,83 @@ class AddToCart
     }
 
     /**
+     * @param $product
+     */
+    public function createAttribute($product)
+    {
+        try {
+            $listAttributes = [
+                'sizeSku' => 'size_sku',
+                'size' => self::DEFAULT_ATTRIBUTE,
+                'sale' => 'sale_modernrugs',
+                'searchSize' => 'search_size',
+                'aliasSize' => 'alias_size',
+                'searchSizeFloor' => 'search_size_floor',
+                'oldPrice' => 'old_price',
+                'shippingLength' => 'shipping_length',
+                'shippingWidth' => 'shipping_width',
+                'shippingHeight' => 'shipping_height',
+                'shippingWeight' => 'shipping_weight',
+                'shippingType' => 'shipping_type',
+                'height' => 'height',
+                'length' => 'length',
+                'madeIn' => 'made_in',
+                'material' => 'material',
+            ];
+            // create attribute
+            foreach ($listAttributes as $attrCode) {
+                if ($this->isProductAttributeExists($attrCode) == false) {
+                    $eavSetup = $this->eavSetupFactory->create();
+                    $paramAttribute = $this->getDetailAttribute($attrCode, $product['variations']);
+                    $eavSetup->addAttribute(Product::ENTITY, $attrCode, $paramAttribute);
+                    $attributeId = $eavSetup->getAttributeId(Product::ENTITY, $attrCode);
+                    if ($attrCode == self::DEFAULT_ATTRIBUTE && count($product['variations']) > 0) {
+                        $option = $this->attributeOption;
+                        $attributeOptionLabel = $this->attributeOptionLabel;
+                        $attributeOptionManagement = $this->attributeOptionManagement;
+
+                        foreach ($product['variations'] as $key => $variation) {
+                            if (isset($variation['size'])) {
+                                $option->setValue($variation['size']);
+                                $attributeOptionLabel->setStoreId(self::DEFAULT_STORE);
+                                $attributeOptionLabel->setLabel($variation['size']);
+                                $option->setLabel($variation['size']);
+                                $option->setStoreLabels([$attributeOptionLabel]);
+                                $option->setSortOrder(0);
+                                $option->setIsDefault(true);
+                                $attributeOptionManagement->add(Product::ENTITY, $attributeId, $option);
+                            }
+                        }
+                    }
+                }
+                $this->eavConfig->clear();
+            }
+        } catch (\Magento\Framework\Exception\InputException $e) {
+
+        } catch (\Magento\Framework\Exception\LocalizedException $e) {
+
+        } catch (\Magento\Framework\Exception\StateException $e) {
+
+        } catch (\Exception $e) {
+
+        }
+    }
+
+    /**
      * @param $urlImage
-     * @return bool|string
-     * @throws \Magento\Framework\Exception\FileSystemException
-     * @throws \Magento\Framework\Exception\LocalizedException
+     * @return false|string
      */
     public function getUrlImage($urlImage)
     {
         try {
+            $linkImage = (strpos($urlImage, self::DEFAULT_URL_BASE) !== false) ? $urlImage : self::DEFAULT_URL_BASE . $urlImage;
+
             /** @var string $tmpDir */
             $tmpDir = $this->directoryList->getPath(DirectoryList::MEDIA) . DIRECTORY_SEPARATOR . 'tmp';
             /** create folder if it is not exists */
             $this->file->checkAndCreateFolder($tmpDir);
             /** @var string $newUrlImage */
-            $newUrlImage = $tmpDir . baseName($urlImage);
+            $newUrlImage = $tmpDir . baseName($linkImage);
             /** read file from URL and copy it to the new destination */
             $result = $this->file->read($urlImage, $newUrlImage);
         } catch (\Magento\Framework\Exception\FileSystemException $e) {
@@ -473,19 +394,19 @@ class AddToCart
         return [
             'group' => 'General',
             'attribute_set' => 'Default',
-            'type' => ($attributeCode == 'size_modernrugs') ? "int" : "varchar",
-            'label' => $attributeCode,
-            'input' => ($attributeCode == 'size_modernrugs') ? 'select' : "text",
+            'type' => ($attributeCode == self::DEFAULT_ATTRIBUTE) ? "int" : "varchar",
+            'label' => ($attributeCode == self::DEFAULT_ATTRIBUTE) ? "Size" : $attributeCode,
+            'input' => ($attributeCode == self::DEFAULT_ATTRIBUTE) ? 'select' : "text",
             'required' => false,
             'is_required' => false,
             'system' => false,
             'backend' => '',
-            'sort_order' => ($attributeCode == 'size_modernrugs') ? 50 : 100,
+            'sort_order' => ($attributeCode == self::DEFAULT_ATTRIBUTE) ? 50 : 100,
             "user_defined" => true,
-            "frontend_input" => ($attributeCode == 'size_modernrugs') ? 'select' : "text",
+            "frontend_input" => ($attributeCode == self::DEFAULT_ATTRIBUTE) ? 'select' : "text",
             "options" => [],
-            "backend_type" => ($attributeCode == 'size_modernrugs') ? "int" : "string",
-            'global' => ($attributeCode == 'size_modernrugs') ? ScopedAttributeInterface::SCOPE_GLOBAL : ScopedAttributeInterface::SCOPE_STORE,
+            "backend_type" => ($attributeCode == self::DEFAULT_ATTRIBUTE) ? "int" : "string",
+            'global' => ($attributeCode == self::DEFAULT_ATTRIBUTE) ? ScopedAttributeInterface::SCOPE_GLOBAL : ScopedAttributeInterface::SCOPE_STORE,
             'is_used_in_grid' => false,
             'is_visible_in_grid' => false,
             'is_filterable_in_grid' => false,
@@ -493,9 +414,9 @@ class AddToCart
             "is_filterable_in_search" => true,
             'visible' => true,
             "is_visible" => true,
-            'is_html_allowed_on_front' => ($attributeCode == 'size_modernrugs') ? true : false,
-            'is_used_in_product_listing' => ($attributeCode == 'size_modernrugs') ? true : false,
-            'used_in_product_listing' => ($attributeCode == 'size_modernrugs') ? true : false,
+            'is_html_allowed_on_front' => ($attributeCode == self::DEFAULT_ATTRIBUTE) ? true : false,
+            'is_used_in_product_listing' => ($attributeCode == self::DEFAULT_ATTRIBUTE) ? true : false,
+            'used_in_product_listing' => ($attributeCode == self::DEFAULT_ATTRIBUTE) ? true : false,
             'visible_on_front' => false,
             "is_searchable" => "1",
             "is_visible_in_advanced_search" => "1",
@@ -504,8 +425,6 @@ class AddToCart
 
     /**
      * @param $product
-     * @throws \Magento\Framework\Exception\FileSystemException
-     * @throws \Magento\Framework\Exception\LocalizedException
      */
     public function createProductConfigurable($product)
     {
@@ -519,7 +438,6 @@ class AddToCart
             $productAdd->setVisibility(4);
             $productAdd->setTaxClassId(0);
             $productAdd->setTypeId('configurable');
-//            $productAdd->setStoreId(0);
             $productAdd->setStoreId(self::DEFAULT_STORE);
             $productAdd->setWebsiteIds(array(self::DEFAULT_WEBSITE));
             $productAdd->setCategoryIds($categoryId);
@@ -548,6 +466,10 @@ class AddToCart
                 )
             );
             $productAdd->save();
+        } catch (\Magento\Framework\Exception\FileSystemException $e) {
+
+        } catch (\Magento\Framework\Exception\LocalizedException $e) {
+
         } catch (\Exception $e) {
             $this->logger->error($this->zendClient->getResponse()->getStatusCode());
         }
@@ -556,21 +478,20 @@ class AddToCart
     /**
      * @param $product
      * @param $variable
-     * @return false|string
-     * @throws \Magento\Framework\Exception\LocalizedException
      */
     public function createProductSimple($product, $variable)
     {
-        $categoryId = ['4', '7', '14'];
-        $sizeModernrugs = 0;
-        $attribute = $this->eavConfig->getAttribute(Product::ENTITY, 'size_modernrugs');
-        $options = $attribute->getSource()->getAllOptions();
-        foreach ($options as $op) {
-            if ($op['label'] == $variable['size']) {
-                $sizeModernrugs = $op['value'];
-            }
-        }
         try {
+            $categoryId = self::DEFAULT_CATEGORY_ID;
+            $sizeModernrugs = 0;
+            $attribute = $this->eavConfig->getAttribute(Product::ENTITY, self::DEFAULT_ATTRIBUTE);
+            $options = $attribute->getSource()->getAllOptions();
+            foreach ($options as $op) {
+                if ($op['label'] == $variable['size']) {
+                    $sizeModernrugs = $op['value'];
+                }
+            }
+
             $productAdd = $this->productFactory->create();
             $productAdd->setSku($variable['sizeSku']);
             $productAdd->setName($product['name'] . $variable['size']);
@@ -580,12 +501,11 @@ class AddToCart
             $productAdd->setTaxClassId(0);
             $productAdd->setPrice($variable['price']);
             $productAdd->setTypeId('simple');
-            //            $productAdd->setStoreId(0);
             $productAdd->setStoreId(self::DEFAULT_STORE);
             $productAdd->setWebsiteIds(array(self::DEFAULT_WEBSITE));
             $productAdd->setCategoryIds($categoryId);
             $productAdd->setDescription($product['description']);
-            $productAdd->setCustomAttribute('size_modernrugs', $sizeModernrugs);
+            $productAdd->setCustomAttribute(self::DEFAULT_ATTRIBUTE, $sizeModernrugs);
             $productAdd->setCustomAttribute('gs1', $variable['GS1']);
             $productAdd->setCustomAttribute('search_size', $variable['searchSize']);
             $productAdd->setCustomAttribute('alias_size', $variable['aliasSize']);
@@ -623,6 +543,10 @@ class AddToCart
                 )
             );
             $productAdd->save();
+        } catch (\Magento\Framework\Exception\LocalizedException $e) {
+
+        } catch (\Magento\Framework\Exception\FileSystemException $e) {
+
         } catch (\Exception $e) {
             var_dump($e->getMessage());
             $this->logger->error($this->zendClient->getResponse()->getStatusCode());
@@ -630,9 +554,117 @@ class AddToCart
     }
 
     /**
+     * @param $customer
+     */
+    public function createCustomer($customer)
+    {
+        try {
+            $isEmailNotExists = $this->customerAccountManagement->isEmailAvailable($customer['email'], Self::DEFAULT_WEBSITE);
+
+            if ($isEmailNotExists) {
+                // Preparing data for new customer
+                $customerNew = $this->customerFactory->create();
+                $customerNew->setWebsiteId(self::DEFAULT_WEBSITE);
+                $customerNew->setEmail($customer['email']);
+                $customerNew->setFirstname($customer['firstName']);
+                $customerNew->setLastname($customer['lastName']);
+
+                // address of customer
+                $address = $this->dataAddressFactory->create();
+                $address->setFirstname($customer['firstName']);
+                $address->setLastname($customer['lastName']);
+                $address->setTelephone($customer['phone']);
+                $street[] = '1408 N 3rd st';
+                $address->setStreet($street);
+                $address->setCity($customer['city']);
+                $address->setCountryId($customer['country']);
+                $address->setPostcode($customer['zip']);
+                if ($customer['state'] && $customer['country']) {
+                    $region = $this->region->loadByCode('CA', 'US');
+                    $regionId = $region->getId();
+                    $address->setRegionId($regionId);
+                }
+                $address->setIsDefaultShipping(1);
+                $address->setIsDefaultBilling(1);
+                $customerNew->setAddresses([$address]);
+
+                // Save data
+                $hashedPassword = $this->encryptorInterface->getHash($customer['email'], true);
+                $this->customerRepository->save($customerNew, $hashedPassword);
+            }
+        } catch (\Magento\Framework\Exception\InputException $e) {
+
+        } catch (\Magento\Framework\Exception\LocalizedException $e) {
+
+        } catch (\Magento\Framework\Exception\State\InputMismatchException $e) {
+
+        } catch (\Exception $e) {
+
+        }
+
+    }
+
+    /**
+     * @param $quote
+     * @param $product
+     * @param $order
+     */
+    public function addProductToQuote($quote, $product, $order)
+    {
+        try {
+            foreach ($order as $data) {
+                var_dump('aaaa1123');
+                if (isset($data['sku']) && $product['sku'] && isset($product['variations']) && isset($data['variation']) && $data['qty']) {
+                    $productParent = $this->product->getIdBySku($product['sku']);
+                    // get attribute id and option id
+                    $optionId = null;
+                    $attributeId = $this->eavSetupFactory->create()->getAttributeId(Product::ENTITY, self::DEFAULT_ATTRIBUTE);
+                    $attribute = $this->eavConfig->getAttribute(Product::ENTITY, self::DEFAULT_ATTRIBUTE);
+                    if ($attribute->usesSource()) {
+                        foreach ($product['variations'] as $variation) {
+                            if (isset($variation['option']) && $variation['option'] == $data['variation']) {
+                                $optionId = $attribute->getSource()->getOptionId($variation['size']);
+                            }
+                        }
+                    }
+                    //check product has in quote
+                    if ($optionId && $attributeId) {
+                        var_dump("todooo add cart");
+                        // add new product to cart
+                        $cart = $this->cart->setQuote($quote);
+                        $requestInfo = new \Magento\Framework\DataObject(
+                            [
+                                'product' => $productParent,
+                                'selected_configurable_option' => 1,
+                                'qty' => $data['qty'],
+                                'super_attribute' => [
+                                    $attributeId => $optionId
+                                ],
+                            ]
+                        );
+                        $productModel = $this->productRepository->get($product['sku'], false, self::DEFAULT_STORE, true);
+                        $quote->addProduct($productModel, $requestInfo);
+                        $this->registry->register('modernrugs', 'user');
+                        $quote->save();
+                        $this->cartRepository->save($quote);
+                        $this->registry->unregister('modernrugs');
+
+                        $quoteIdMask = $this->quoteIdMaskFactory->create();
+                        $quoteIdMask->setQuoteId($quote->getId())->save();
+                    }
+                }
+            }
+        } catch (\Magento\Framework\Exception\LocalizedException $e) {
+
+        } catch (\Magento\Framework\Exception\NoSuchEntityException $e) {
+
+        }
+    }
+
+    /**
      * Returns true if attribute exists and false if it doesn't exist
      *
-     * @param string $field
+     * @param string $attributeCode
      * @return bool
      * @throws \Magento\Framework\Exception\LocalizedException
      */
@@ -645,7 +677,7 @@ class AddToCart
 
     /**
      * @param $attributeCode
-     * @return bool|mixed
+     * @return false|mixed
      * @throws \Magento\Framework\Exception\LocalizedException
      */
     public function getAttributeIdByCode($attributeCode)
