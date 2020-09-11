@@ -162,7 +162,7 @@ class AddToCart
      * @param $order
      * @return false|string
      */
-    public function getPost($product, $customer, $order, $maskQuote = null, $token = null)
+    public function getPost($product, $customer, $order, $maskCart = null, $token = null)
     {
         $this->logger->info('Start ::: Add To Cart Modernrugs!');
         try {
@@ -176,8 +176,6 @@ class AddToCart
                 return json_encode(['status' => false, 'message' => 'Order can not empty']);
             }
 
-            $token = '';
-            $maskQuote = '';
             // check and add attribute
             if (isset($product['variations']) && isset($product['variations'][0]) && array_keys($product['variations'][0])) {
                 $this->createAttribute($product);
@@ -269,10 +267,11 @@ class AddToCart
             // check and add customer
             if (empty($customer) || empty($customer['email'])) {
                 try {
-                    $this->logger->info("Create empty cart or add maskQuote: " . $maskQuote);
-                    if ($maskQuote != null) {
-                        $quoteMask = $this->quoteIdMaskFactory->create()->load($maskQuote, 'masked_id');
-                        $cartId = $quoteMask->getQuoteId();
+                    $this->logger->info("Create empty cart or add maskCart: " . $maskCart);
+                    var_dump($maskCart);
+                    if ($maskCart != null) {
+                        $quoteMaskData = $this->quoteIdMaskFactory->create()->load($maskCart, 'masked_id');
+                        $cartId = $quoteMaskData->getQuoteId();
                     } else {
                         $cartId = $this->cartManagementInterface->createEmptyCart(); //Create empty cart
                     }
@@ -282,6 +281,10 @@ class AddToCart
                     $quote->setCurrency();
                     if (!empty($order)) {
                         $this->addProductToQuote($quote, $product, $order);
+                    }
+                    if ($maskCart == null) {
+                        $quoteMaskData = $this->quoteIdMaskFactory->create()->load($cartId, 'quote_id');
+                        $maskCart = $quoteMaskData->getMaskedId();
                     }
                 } catch (\Magento\Framework\Exception\CouldNotSaveException $e) {
                     $this->logger->error("Add to cart not customer error: " . $e->getMessage());
@@ -324,9 +327,9 @@ class AddToCart
                 }
             }
             $this->logger->info("token : $token");
-            $this->logger->info("mask_quote : $maskQuote");
+            $this->logger->info("mask_quote : $maskCart");
 
-            $response = ['status' => true, 'message' => 'Add to cart done!', 'content' => ['token' => $token, 'mask_quote' => $maskQuote]];
+            $response = ['status' => true, 'message' => 'Add to cart done!', 'content' => ['token' => $token, 'maskCart' => $maskCart]];
         } catch (\Exception $e) {
             $this->logger->info("Error not found :" . $e->getMessage());
             $response = ['status' => false, 'message' => ' Error not found'];
