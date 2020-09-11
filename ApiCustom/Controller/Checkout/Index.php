@@ -13,6 +13,7 @@ use Magento\Framework\App\Action\Context;
 use Magento\Framework\App\Cache\TypeListInterface;
 use Magento\Framework\Stdlib\CookieManagerInterface;
 use Modernrugs\Log\Helper\LoggerContainer;
+use Magento\Framework\Stdlib\Cookie\CookieMetadataFactory;
 
 /**
  * Class Index
@@ -31,6 +32,7 @@ class Index extends Action
 
     const COOKIE_NAME_TOKEN = 'token';
     const COOKIE_NAME_QUOTE_MASK = 'mask_quote';
+    const COOKIE_DOMAIN = 'http://magento233.com/';
     const COOKIE_DURATION = 86400; // lifetime in seconds
 
     public function __construct(
@@ -43,7 +45,7 @@ class Index extends Action
         QuoteFactory $quoteFactory,
         CustomerSession $customerSession,
         LoggerContainer $logger,
-        \Magento\Framework\Stdlib\Cookie\CookieMetadataFactory $cookieMetadataFactory,
+        CookieMetadataFactory $cookieMetadataFactory,
         QuoteIdMaskFactory $quoteIdMaskFactory
     )
     {
@@ -62,7 +64,7 @@ class Index extends Action
 
     public function execute()
     {
-        $this->logger->info("Cron job Log is START");
+        $this->logger->info("Modernrugs Checkout Start!");
 //        http://magento240.com/modernrugs/checkout?mask_quote=2GJfelpTUl3Fk81jCD40D8mi6rx37tgz
         $maskQuote = $this->cookieManager->getCookie(self::COOKIE_NAME_QUOTE_MASK);
 //        $maskQuote = $this->getRequest()->getParam('mask_quote');
@@ -75,34 +77,37 @@ class Index extends Action
 
 //        $metadata = $this->cookieMetadataFactory
 //            ->createPublicCookieMetadata()
-//            ->setDuration(self::COOKIE_DURATION);
-//
-//
+////            ->setPath('/')
+////            ->setDuration(self::COOKIE_DURATION)
+////            ->setDomain(self::COOKIE_DOMAIN)
+//            ->setHttpOnly(false);
+
 //        $this->cookieManager->setPublicCookie(
 //            self::COOKIE_NAME_TOKEN,
-//            'i920yiuotbd6xuzzptmsowtyheu05zr4',
+//            'ymc6muketvdknlkzd9xspsfqgfm97d6b',
 //            $metadata
 //        );
-//
+
 //        $this->cookieManager->setPublicCookie(
 //            self::COOKIE_NAME_QUOTE_MASK,
 //            'i920yiuotbd6xuzzptmsowtyheu05zr4',
 //            $metadata
 //        );
 
-
         $cookieToken = $this->cookieManager->getCookie(self::COOKIE_NAME_TOKEN);
-
+        $this->logger->info("Get cookie token: " . $cookieToken);
         if ($cookieToken) {
             $customerId = $this->tokenModelFactory->create()->loadByToken($cookieToken)->getCustomerId();
+            $this->logger->info("Get cookie token: " . $customerId);
             $quote = $this->quoteFactory->create()->loadByCustomer($customerId);
+            $this->logger->info("Get Quote form customer: " . $quote->getId());
             if ($customerId && $quote->getId()) {
                 $this->customerSession->setCustomerId($customerId);
                 $this->checkoutSession->setQuoteId($quote->getId());
+//                $this->cacheTypeList->cleanType('full_page');
             }
         }
-
-        return $this->_redirect('checkout/cart');
+//        return $this->_redirect('checkout/cart');
         return $this->pageFactory->create();
     }
 }

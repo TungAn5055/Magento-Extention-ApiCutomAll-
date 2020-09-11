@@ -3,8 +3,7 @@
 namespace Modernrugs\ApiCustom\Model\Api;
 
 use Magento\Quote\Model\QuoteIdMaskFactory;
-use Magento\Setup\Exception;
-use Psr\Log\LoggerInterface;
+use Modernrugs\Log\Helper\LoggerContainer;
 use Magento\Catalog\Model\Product;
 use Zend\Http\Client;
 use Magento\Quote\Api\CartRepositoryInterface;
@@ -30,6 +29,7 @@ use Magento\Directory\Model\Region;
 use Magento\Quote\Api\CartManagementInterface;
 use Magento\Checkout\Model\Cart;
 use Magento\Framework\Registry;
+use Magento\Integration\Model\Oauth\TokenFactory as TokenModelFactory;
 
 /**
  * Class AddToCart
@@ -72,7 +72,6 @@ class AddToCart
 
     /**
      * AddToCart constructor.
-     * @param LoggerInterface $logger
      * @param Product $product
      * @param Config $eavConfig
      * @param ProductRepository $productRepository
@@ -96,10 +95,11 @@ class AddToCart
      * @param Cart $cart
      * @param Registry $registry
      * @param Client $zendClient
+     * @param LoggerContainer $logger
+     * @param TokenModelFactory $tokenModelFactory
      * @param QuoteIdMaskFactory $quoteIdMaskFactory
      */
     public function __construct(
-        LoggerInterface $logger,
         Product $product,
         Config $eavConfig,
         ProductRepository $productRepository,
@@ -123,10 +123,11 @@ class AddToCart
         Cart $cart,
         Registry $registry,
         Client $zendClient,
+        LoggerContainer $logger,
+        TokenModelFactory $tokenModelFactory,
         QuoteIdMaskFactory $quoteIdMaskFactory
     )
     {
-        $this->logger = $logger;
         $this->zendClient = $zendClient;
         $this->product = $product;
         $this->eavConfig = $eavConfig;
@@ -151,6 +152,8 @@ class AddToCart
         $this->cartManagementInterface = $cartManagementInterface;
         $this->registry = $registry;
         $this->quoteIdMaskFactory = $quoteIdMaskFactory;
+        $this->tokenModelFactory = $tokenModelFactory;
+        $this->logger = $logger->getLoggerAndSwitchTo(LoggerContainer::CONTEXT_NAME_LOG_CONTAINER);
     }
 
     /**
@@ -161,17 +164,20 @@ class AddToCart
      */
     public function getPost($product, $customer, $order, $maskQuote = null, $token = null)
     {
-//        $this->logger->info('Start Api Modernrugs!!!!!!!!!');
-        $response = ['success' => false];
+        $this->logger->info('Start ::: Add To Cart Modernrugs!');
         try {
             if (empty($product) || !isset($product['sku'])) {
-                return json_encode(['success' => true, 'message' => 'Product can not empty!']);
+                $this->logger->error('End ::: Product empty!');
+                return json_encode(['status' => false, 'message' => 'Product can not empty!']);
             }
 
             if (empty($order)) {
-                return json_encode(['success' => true, 'message' => 'Order can not empty']);
+                $this->logger->error('End ::: Order empty!');
+                return json_encode(['status' => false, 'message' => 'Order can not empty']);
             }
 
+            $token = '';
+            $maskQuote = '';
             // check and add attribute
             if (isset($product['variations']) && isset($product['variations'][0]) && array_keys($product['variations'][0])) {
                 $this->createAttribute($product);
@@ -189,52 +195,68 @@ class AddToCart
                         $this->createProductSimple($product, $variation);
                     }
                 }
+                $this->eavConfig->clear();
             }
 
             // add option and product to configurable
             if ($this->product->getIdBySku($product['sku'])) {
-                $productData = $this->productRepository->get($product['sku']);
-                if ($productData->getTypeId() == 'configurable') {
-                    $children = $productData->getTypeInstance()->getUsedProducts($productData);
-                    $listChildren = [];
-                    $linkedProduct = [];
-                    if (count($children) > 0) {
-                        foreach ($children as $child) {
-                            array_push($listChildren, $child->getID());
-                        }
-                    }
-                    if (isset($product['variations'])) {
-                        foreach ($product['variations'] as $variation) {
-                            $productId = $this->product->getIdBySku($variation['sizeSku']);
-                            if ($productId && !in_array($productId, $listChildren)) {
-                                array_push($linkedProduct, $productId);
+                try {
+                    $productData = $this->productRepository->get($product['sku']);
+                    if ($productData->getTypeId() == 'configurable') {
+                        $this->logger->info("Product configurable: " . $product['sku']);
+                        $children = $productData->getTypeInstance()->getUsedProducts($productData);
+                        $listChildren = [];
+                        $linkedProduct = [];
+                        if (count($children) > 0) {
+                            foreach ($children as $child) {
+                                array_push($listChildren, $child->getID());
                             }
                         }
-                    }
-                    // add option to product configurable
-                    $attributeId = $this->getAttributeIdByCode(self::DEFAULT_ATTRIBUTE);
-                    if (count($linkedProduct) > 0 && $attributeId) {
-                        $configurableAttributesData = [
-                            "option" => [
-                                "attribute_id" => $attributeId,
-                                "label" => "Size",
-                                "position" => 0,
-                                "is_use_default" => true,
-                                "values" => [
-                                    [
-                                        "value_index" => 0
+                        if (isset($product['variations'])) {
+                            foreach ($product['variations'] as $variation) {
+                                $productId = $this->product->getIdBySku($variation['sizeSku']);
+                                if ($productId && !in_array($productId, $listChildren)) {
+                                    array_push($linkedProduct, $productId);
+                                }
+                            }
+                        }
+                        // add option to product configurable
+                        $attributeId = $this->getAttributeIdByCode(self::DEFAULT_ATTRIBUTE);
+                        if (count($linkedProduct) > 0 && $attributeId) {
+                            $configurableAttributesData = [
+                                "option" => [
+                                    "attribute_id" => $attributeId,
+                                    "label" => "Size",
+                                    "position" => 0,
+                                    "is_use_default" => true,
+                                    "values" => [
+                                        [
+                                            "value_index" => 0
+                                        ]
                                     ]
                                 ]
-                            ]
-                        ];
-
-                        $product = $this->productRepository->get($product['sku']);
-                        $configurableOptions = $this->optionsFactory->create($configurableAttributesData);
-                        $product->getExtensionAttributes()->setConfigurableProductOptions($configurableOptions);
-                        //add list product need associated
-                        $product->getExtensionAttributes()->setConfigurableProductLinks($linkedProduct);
-                        $this->productRepository->save($product);
+                            ];
+                            $this->logger->info("Add simple to configurable: " . $linkedProduct[0]);
+                            $productNew = $this->productRepository->get($product['sku']);
+                            $configurableOptions = $this->optionsFactory->create($configurableAttributesData);
+                            $productNew->getExtensionAttributes()->setConfigurableProductOptions($configurableOptions);
+                            //add list product need associated
+                            $productNew->getExtensionAttributes()->setConfigurableProductLinks($linkedProduct);
+                            $this->productRepository->save($productNew);
+                        }
                     }
+                } catch (\Magento\Framework\Exception\CouldNotSaveException $e) {
+                    $this->logger->error("Add option and product to configurable error: " . $e->getMessage());
+                } catch (\Magento\Framework\Exception\InputException $e) {
+                    $this->logger->error("Add option and product to configurable error: " . $e->getMessage());
+                } catch (\Magento\Framework\Exception\LocalizedException $e) {
+                    $this->logger->error("Add option and product to configurable error: " . $e->getMessage());
+                } catch (\Magento\Framework\Exception\NoSuchEntityException $e) {
+                    $this->logger->error("Add option and product to configurable error: " . $e->getMessage());
+                } catch (\Magento\Framework\Exception\StateException $e) {
+                    $this->logger->error("Add option and product to configurable error: " . $e->getMessage());
+                } catch (\Exception $e) {
+                    $this->logger->error("Add option and product to configurable error: " . $e->getMessage());
                 }
             }
 
@@ -246,29 +268,40 @@ class AddToCart
             // get quote and add product to quote
             // check and add customer
             if (empty($customer) || empty($customer['email'])) {
-                if ($maskQuote != null) {
-                    $quoteMask = $this->quoteIdMaskFactory->create()->load($maskQuote, 'masked_id');
-                    $cartId = $quoteMask->getQuoteId();
-                } else {
-                    $cartId = $this->cartManagementInterface->createEmptyCart(); //Create empty cart
-                }
+                try {
+                    $this->logger->info("Create empty cart or add maskQuote: " . $maskQuote);
+                    if ($maskQuote != null) {
+                        $quoteMask = $this->quoteIdMaskFactory->create()->load($maskQuote, 'masked_id');
+                        $cartId = $quoteMask->getQuoteId();
+                    } else {
+                        $cartId = $this->cartManagementInterface->createEmptyCart(); //Create empty cart
+                    }
 
-                $quote = $this->cartRepository->get($cartId); // load empty cart quote
-                $quote->setStoreId(self::DEFAULT_STORE);
-                $quote->setCurrency();
-                if (!empty($order)) {
-                    $this->addProductToQuote($quote, $product, $order);
+                    $quote = $this->cartRepository->get($cartId); // load empty cart quote
+                    $quote->setStoreId(self::DEFAULT_STORE);
+                    $quote->setCurrency();
+                    if (!empty($order)) {
+                        $this->addProductToQuote($quote, $product, $order);
+                    }
+                } catch (\Magento\Framework\Exception\CouldNotSaveException $e) {
+                    $this->logger->error("Add to cart not customer error: " . $e->getMessage());
+                } catch (\Magento\Framework\Exception\NoSuchEntityException $e) {
+                    $this->logger->error("Add to cart not customer error: " . $e->getMessage());
+                } catch (\Exception $e) {
+                    $this->logger->error("Add to cart not customer error " . $e->getMessage());
                 }
             } else {
                 try {
                     $customer = $this->customerRepository->get($customer['email'], self::DEFAULT_WEBSITE);
                     $customerId = $customer->getId();
+                    $token = $this->tokenModelFactory->create()->createCustomerToken($customerId)->getToken();
                     $quoteId = $this->quoteFactory->create()->getCollection()
                         ->addFieldToSelect('entity_id')
                         ->addFieldToFilter('customer_id', $customerId)
                         ->addFieldToFilter('customer_id', $customerId);
                     if (!empty($order) && $customerId) {
-                        if (count($quoteId)) {
+                        $this->logger->info("Add product exist or new to quote: " . $customerId . ' - count quote id ' . count($quoteId));
+                        if (count($quoteId) > 0) {
                             $quote = $this->quoteFactory->create()->loadByCustomer($customerId);
                             $this->addProductToQuote($quote, $product, $order);
                         } else {
@@ -280,18 +313,26 @@ class AddToCart
                             $this->addProductToQuote($quoteNew, $product, $order);
                         }
                     }
+                } catch (\Magento\Framework\Exception\CouldNotSaveException $e) {
+                    $this->logger->error("Add to cart customer error: " . $e->getMessage());
+                } catch (\Magento\Framework\Exception\LocalizedException $e) {
+                    $this->logger->error("Add to cart customer error: " . $e->getMessage());
+                } catch (\Magento\Framework\Exception\NoSuchEntityException $e) {
+                    $this->logger->error("Add to cart customer error: " . $e->getMessage());
                 } catch (\Exception $e) {
-                    var_dump('error');
-                    var_dump($e->getMessage());
+                    $this->logger->error("Add to cart customer error: " . $e->getMessage());
                 }
             }
+            $this->logger->info("token : $token");
+            $this->logger->info("mask_quote : $maskQuote");
 
-            $response = ['success' => true, 'message' => 'annnnnnn'];
+            $response = ['status' => true, 'message' => 'Add to cart done!', 'content' => ['token' => $token, 'mask_quote' => $maskQuote]];
         } catch (\Exception $e) {
-            $response = ['success' => false, 'message' => $e->getMessage()];
-            //            $this->logger->info($e->getMessage());
+            $this->logger->info("Error not found :" . $e->getMessage());
+            $response = ['status' => false, 'message' => ' Error not found'];
         }
 
+        $this->logger->info('End ::: Add To Cart Modernrugs!');
         return json_encode($response);
     }
 
@@ -300,6 +341,7 @@ class AddToCart
      */
     public function createAttribute($product)
     {
+        $this->logger->info("Start createAttribute: ");
         try {
             $listAttributes = [
                 'sizeSku' => 'size_sku',
@@ -322,6 +364,7 @@ class AddToCart
             // create attribute
             foreach ($listAttributes as $attrCode) {
                 if ($this->isProductAttributeExists($attrCode) == false) {
+                    $this->logger->info("attribute code: " . $attrCode);
                     $eavSetup = $this->eavSetupFactory->create();
                     $paramAttribute = $this->getDetailAttribute($attrCode, $product['variations']);
                     $eavSetup->addAttribute(Product::ENTITY, $attrCode, $paramAttribute);
@@ -348,13 +391,13 @@ class AddToCart
                 $this->eavConfig->clear();
             }
         } catch (\Magento\Framework\Exception\InputException $e) {
-
+            $this->logger->error("Add attribute error: " . $e->getMessage());
         } catch (\Magento\Framework\Exception\LocalizedException $e) {
-
+            $this->logger->error("Add attribute error: " . $e->getMessage());
         } catch (\Magento\Framework\Exception\StateException $e) {
-
+            $this->logger->error("Add attribute error: " . $e->getMessage());
         } catch (\Exception $e) {
-
+            $this->logger->error("Add attribute error: " . $e->getMessage());
         }
     }
 
@@ -428,6 +471,7 @@ class AddToCart
      */
     public function createProductConfigurable($product)
     {
+        $this->logger->info("Start createProductConfigurable:" . $product['sku']);
         try {
             $categoryId = ['4', '7', '14'];
             $productAdd = $this->productFactory->create();
@@ -467,11 +511,11 @@ class AddToCart
             );
             $productAdd->save();
         } catch (\Magento\Framework\Exception\FileSystemException $e) {
-
+            $this->logger->error("Create Product Configurable error: " . $e->getMessage());
         } catch (\Magento\Framework\Exception\LocalizedException $e) {
-
+            $this->logger->error("Create Product Configurable error: " . $e->getMessage());
         } catch (\Exception $e) {
-            $this->logger->error($this->zendClient->getResponse()->getStatusCode());
+            $this->logger->error("create Product Configurable error: " . $e->getMessage());
         }
     }
 
@@ -481,6 +525,7 @@ class AddToCart
      */
     public function createProductSimple($product, $variable)
     {
+        $this->logger->info("Start createProductSimple:" . $variable['sizeSku']);
         try {
             $categoryId = self::DEFAULT_CATEGORY_ID;
             $sizeModernrugs = 0;
@@ -494,7 +539,7 @@ class AddToCart
 
             $productAdd = $this->productFactory->create();
             $productAdd->setSku($variable['sizeSku']);
-            $productAdd->setName($product['name'] . $variable['size']);
+            $productAdd->setName($product['name'] . ' ' . $variable['size']);
             $productAdd->setAttributeSetId(4);
             $productAdd->setStatus(1);
             $productAdd->setVisibility(4);
@@ -544,12 +589,11 @@ class AddToCart
             );
             $productAdd->save();
         } catch (\Magento\Framework\Exception\LocalizedException $e) {
-
+            $this->logger->error("Create Product Simple error: " . $e->getMessage());
         } catch (\Magento\Framework\Exception\FileSystemException $e) {
-
+            $this->logger->error("Create Product Simple error: " . $e->getMessage());
         } catch (\Exception $e) {
-            var_dump($e->getMessage());
-            $this->logger->error($this->zendClient->getResponse()->getStatusCode());
+            $this->logger->error("Create Product Simple error: " . $e->getMessage());
         }
     }
 
@@ -559,6 +603,7 @@ class AddToCart
     public function createCustomer($customer)
     {
         try {
+            $this->logger->info("Create Customer: " . $customer['email']);
             $isEmailNotExists = $this->customerAccountManagement->isEmailAvailable($customer['email'], Self::DEFAULT_WEBSITE);
 
             if ($isEmailNotExists) {
@@ -566,42 +611,43 @@ class AddToCart
                 $customerNew = $this->customerFactory->create();
                 $customerNew->setWebsiteId(self::DEFAULT_WEBSITE);
                 $customerNew->setEmail($customer['email']);
-                $customerNew->setFirstname($customer['firstName']);
-                $customerNew->setLastname($customer['lastName']);
-
-                // address of customer
-                $address = $this->dataAddressFactory->create();
-                $address->setFirstname($customer['firstName']);
-                $address->setLastname($customer['lastName']);
-                $address->setTelephone($customer['phone']);
-                $street[] = '1408 N 3rd st';
-                $address->setStreet($street);
-                $address->setCity($customer['city']);
-                $address->setCountryId($customer['country']);
-                $address->setPostcode($customer['zip']);
-                if ($customer['state'] && $customer['country']) {
-                    $region = $this->region->loadByCode('CA', 'US');
-                    $regionId = $region->getId();
-                    $address->setRegionId($regionId);
+                $customerNew->setFirstname(($customer['firstName']) ? $customer['firstName'] : '');
+                $customerNew->setLastname(($customer['lastName']) ? $customer['lastName'] : '');
+                if (isset($customer['country']) && isset($customer['zip'])
+                    && isset($customer['state']) && isset($customer['city'])
+                    && isset($customer['street'])) {
+                    // address of customer
+                    $address = $this->dataAddressFactory->create();
+                    $address->setFirstname(($customer['firstName']) ? $customer['firstName'] : '');
+                    $address->setLastname(($customer['lastName']) ? $customer['lastName'] : '');
+                    $address->setTelephone($customer['phone']);
+                    $street[] = $customer['street'];
+                    $address->setStreet($street);
+                    $address->setCity($customer['city']);
+                    $address->setCountryId($customer['country']);
+                    $address->setPostcode($customer['zip']);
+                    if ($customer['state'] && $customer['country']) {
+                        $region = $this->region->loadByCode($customer['state'], $customer['country']);
+                        $regionId = $region->getId();
+                        $address->setRegionId($regionId);
+                    }
+                    $address->setIsDefaultShipping(1);
+                    $address->setIsDefaultBilling(1);
+                    $customerNew->setAddresses([$address]);
                 }
-                $address->setIsDefaultShipping(1);
-                $address->setIsDefaultBilling(1);
-                $customerNew->setAddresses([$address]);
-
                 // Save data
                 $hashedPassword = $this->encryptorInterface->getHash($customer['email'], true);
                 $this->customerRepository->save($customerNew, $hashedPassword);
             }
         } catch (\Magento\Framework\Exception\InputException $e) {
-
+            $this->logger->error("Create customer error: " . $e->getMessage());
         } catch (\Magento\Framework\Exception\LocalizedException $e) {
-
+            $this->logger->error("Create customer error: " . $e->getMessage());
         } catch (\Magento\Framework\Exception\State\InputMismatchException $e) {
-
+            $this->logger->error("Create customer error: " . $e->getMessage());
         } catch (\Exception $e) {
-
+            $this->logger->error("Create customer error: " . $e->getMessage());
         }
-
     }
 
     /**
@@ -613,8 +659,7 @@ class AddToCart
     {
         try {
             foreach ($order as $data) {
-                var_dump('aaaa1123');
-                if (isset($data['sku']) && $product['sku'] && isset($product['variations']) && isset($data['variation']) && $data['qty']) {
+                if (isset($data['sku']) && isset($product['sku']) && isset($product['variations']) && isset($data['variation']) && isset($data['qty'])) {
                     $productParent = $this->product->getIdBySku($product['sku']);
                     // get attribute id and option id
                     $optionId = null;
@@ -627,9 +672,9 @@ class AddToCart
                             }
                         }
                     }
+                    $this->logger->info("Add Product To Quote: optionId - attributeId" . $optionId . '-' . $attributeId);
                     //check product has in quote
                     if ($optionId && $attributeId) {
-                        var_dump("todooo add cart");
                         // add new product to cart
                         $cart = $this->cart->setQuote($quote);
                         $requestInfo = new \Magento\Framework\DataObject(
@@ -644,6 +689,7 @@ class AddToCart
                         );
                         $productModel = $this->productRepository->get($product['sku'], false, self::DEFAULT_STORE, true);
                         $quote->addProduct($productModel, $requestInfo);
+                        $this->logger->info("Add Product To Quote: skuparent-qty-quoteId" . $productParent . '-' . $data['qty'] . '-' . $quote->getId());
                         $this->registry->register('modernrugs', 'user');
                         $quote->save();
                         $this->cartRepository->save($quote);
@@ -655,9 +701,11 @@ class AddToCart
                 }
             }
         } catch (\Magento\Framework\Exception\LocalizedException $e) {
-
+            $this->logger->error("Add Product To Quote error: " . $e->getMessage());
         } catch (\Magento\Framework\Exception\NoSuchEntityException $e) {
-
+            $this->logger->error("Add Product To Quote error: " . $e->getMessage());
+        } catch (\Exception $e) {
+            $this->logger->error("Add Product To Quote error: " . $e->getMessage());
         }
     }
 
