@@ -67,7 +67,7 @@ class AddToCart
     const DEFAULT_WEBSITE = 1;
     const DEFAULT_STORE = 1;
     const DEFAULT_ATTRIBUTE = 'size_modernrugs';
-    const DEFAULT_URL_BASE = 'https://www.modernrugs.com/';
+    const DEFAULT_URL_BASE = 'https://www.modernrugs.com';
     const DEFAULT_CATEGORY_ID = ['4', '7', '14'];
 
     /**
@@ -246,15 +246,15 @@ class AddToCart
                 } catch (\Magento\Framework\Exception\CouldNotSaveException $e) {
                     $this->logger->error("Add option and product to configurable error: " . $e->getMessage());
                 } catch (\Magento\Framework\Exception\InputException $e) {
-                    $this->logger->error("Add option and product to configurable error: " . $e->getMessage());
+                    $this->logger->error("Add option and product to configurable error1: " . $e->getMessage());
                 } catch (\Magento\Framework\Exception\LocalizedException $e) {
-                    $this->logger->error("Add option and product to configurable error: " . $e->getMessage());
+                    $this->logger->error("Add option and product to configurable error2: " . $e->getMessage());
                 } catch (\Magento\Framework\Exception\NoSuchEntityException $e) {
-                    $this->logger->error("Add option and product to configurable error: " . $e->getMessage());
+                    $this->logger->error("Add option and product to configurable error3: " . $e->getMessage());
                 } catch (\Magento\Framework\Exception\StateException $e) {
-                    $this->logger->error("Add option and product to configurable error: " . $e->getMessage());
+                    $this->logger->error("Add option and product to configurable error4: " . $e->getMessage());
                 } catch (\Exception $e) {
-                    $this->logger->error("Add option and product to configurable error: " . $e->getMessage());
+                    $this->logger->error("Add option and product to configurable error5: " . $e->getMessage());
                 }
             }
 
@@ -268,7 +268,6 @@ class AddToCart
             if (empty($customer) || empty($customer['email'])) {
                 try {
                     $this->logger->info("Create empty cart or add maskCart: " . $maskCart);
-                    var_dump($maskCart);
                     if ($maskCart != null) {
                         $quoteMaskData = $this->quoteIdMaskFactory->create()->load($maskCart, 'masked_id');
                         $cartId = $quoteMaskData->getQuoteId();
@@ -319,11 +318,11 @@ class AddToCart
                 } catch (\Magento\Framework\Exception\CouldNotSaveException $e) {
                     $this->logger->error("Add to cart customer error: " . $e->getMessage());
                 } catch (\Magento\Framework\Exception\LocalizedException $e) {
-                    $this->logger->error("Add to cart customer error: " . $e->getMessage());
+                    $this->logger->error("Add to cart customer error1: " . $e->getMessage());
                 } catch (\Magento\Framework\Exception\NoSuchEntityException $e) {
-                    $this->logger->error("Add to cart customer error: " . $e->getMessage());
+                    $this->logger->error("Add to cart customer error2: " . $e->getMessage());
                 } catch (\Exception $e) {
-                    $this->logger->error("Add to cart customer error: " . $e->getMessage());
+                    $this->logger->error("Add to cart customer error3: " . $e->getMessage());
                 }
             }
             $this->logger->info("token : $token");
@@ -371,23 +370,24 @@ class AddToCart
                     $eavSetup = $this->eavSetupFactory->create();
                     $paramAttribute = $this->getDetailAttribute($attrCode, $product['variations']);
                     $eavSetup->addAttribute(Product::ENTITY, $attrCode, $paramAttribute);
-                    $attributeId = $eavSetup->getAttributeId(Product::ENTITY, $attrCode);
-                    if ($attrCode == self::DEFAULT_ATTRIBUTE && count($product['variations']) > 0) {
-                        $option = $this->attributeOption;
-                        $attributeOptionLabel = $this->attributeOptionLabel;
-                        $attributeOptionManagement = $this->attributeOptionManagement;
+                }
+                if ($attrCode == self::DEFAULT_ATTRIBUTE && count($product['variations']) > 0 && $this->isProductAttributeExists($attrCode) != false) {
 
-                        foreach ($product['variations'] as $key => $variation) {
-                            if (isset($variation['size'])) {
-                                $option->setValue($variation['size']);
-                                $attributeOptionLabel->setStoreId(self::DEFAULT_STORE);
-                                $attributeOptionLabel->setLabel($variation['size']);
-                                $option->setLabel($variation['size']);
-                                $option->setStoreLabels([$attributeOptionLabel]);
-                                $option->setSortOrder(0);
-                                $option->setIsDefault(true);
-                                $attributeOptionManagement->add(Product::ENTITY, $attributeId, $option);
-                            }
+                    $option = $this->attributeOption;
+                    $attributeOptionLabel = $this->attributeOptionLabel;
+                    $attributeOptionManagement = $this->attributeOptionManagement;
+                    $eavSetup = $this->eavSetupFactory->create();
+                    $attributeId = $eavSetup->getAttributeId(Product::ENTITY, $attrCode);
+                    foreach ($product['variations'] as $key => $variation) {
+                        if (isset($variation['size'])) {
+                            $option->setValue($variation['size']);
+                            $attributeOptionLabel->setStoreId(self::DEFAULT_STORE);
+                            $attributeOptionLabel->setLabel($variation['size']);
+                            $option->setLabel($variation['size']);
+                            $option->setStoreLabels([$attributeOptionLabel]);
+                            $option->setSortOrder(0);
+                            $option->setIsDefault(true);
+                            $attributeOptionManagement->add(Product::ENTITY, $attributeId, $option);
                         }
                     }
                 }
@@ -396,11 +396,11 @@ class AddToCart
         } catch (\Magento\Framework\Exception\InputException $e) {
             $this->logger->error("Add attribute error: " . $e->getMessage());
         } catch (\Magento\Framework\Exception\LocalizedException $e) {
-            $this->logger->error("Add attribute error: " . $e->getMessage());
+            $this->logger->error("Add attribute error1: " . $e->getMessage());
         } catch (\Magento\Framework\Exception\StateException $e) {
-            $this->logger->error("Add attribute error: " . $e->getMessage());
+            $this->logger->error("Add attribute error2: " . $e->getMessage());
         } catch (\Exception $e) {
-            $this->logger->error("Add attribute error: " . $e->getMessage());
+            $this->logger->error("Add attribute error3: " . $e->getMessage());
         }
     }
 
@@ -412,7 +412,6 @@ class AddToCart
     {
         try {
             $linkImage = (strpos($urlImage, self::DEFAULT_URL_BASE) !== false) ? $urlImage : self::DEFAULT_URL_BASE . $urlImage;
-
             /** @var string $tmpDir */
             $tmpDir = $this->directoryList->getPath(DirectoryList::MEDIA) . DIRECTORY_SEPARATOR . 'tmp';
             /** create folder if it is not exists */
@@ -420,11 +419,11 @@ class AddToCart
             /** @var string $newUrlImage */
             $newUrlImage = $tmpDir . baseName($linkImage);
             /** read file from URL and copy it to the new destination */
-            $result = $this->file->read($urlImage, $newUrlImage);
+            $result = $this->file->read($linkImage, $newUrlImage);
         } catch (\Magento\Framework\Exception\FileSystemException $e) {
-            $this->logger->error($this->zendClient->getResponse()->getStatusCode());
+            $this->logger->error("Add image error: " . $e->getMessage());
         } catch (\Magento\Framework\Exception\LocalizedException $e) {
-            $this->logger->error($this->zendClient->getResponse()->getStatusCode());
+            $this->logger->error("Add image error1: " . $e->getMessage());
         }
 
         return $result ? $newUrlImage : false;
@@ -489,12 +488,7 @@ class AddToCart
             $productAdd->setWebsiteIds(array(self::DEFAULT_WEBSITE));
             $productAdd->setCategoryIds($categoryId);
             $productAdd->setDescription($product['description']);
-            $productAdd->setCustomAttribute('material', $product['material']);
-            $productAdd->setCustomAttribute('collection', $product['collection']);
-            $productAdd->setCustomAttribute('vendor', $product['vendor']);
-            $productAdd->setCustomAttribute('designer', $product['designer']);
-            $productAdd->setCustomAttribute('made_in', $product['madeIn']);
-            $urlImage = $this->getUrlImage($product['image']);
+            $urlImage = $this->getUrlImage($product['picture']);
             if ($urlImage) {
                 $imageType = [
                     "image",
@@ -516,9 +510,9 @@ class AddToCart
         } catch (\Magento\Framework\Exception\FileSystemException $e) {
             $this->logger->error("Create Product Configurable error: " . $e->getMessage());
         } catch (\Magento\Framework\Exception\LocalizedException $e) {
-            $this->logger->error("Create Product Configurable error: " . $e->getMessage());
+            $this->logger->error("Create Product Configurable error1: " . $e->getMessage());
         } catch (\Exception $e) {
-            $this->logger->error("create Product Configurable error: " . $e->getMessage());
+            $this->logger->error("create Product Configurable error2: " . $e->getMessage());
         }
     }
 
@@ -554,11 +548,9 @@ class AddToCart
             $productAdd->setCategoryIds($categoryId);
             $productAdd->setDescription($product['description']);
             $productAdd->setCustomAttribute(self::DEFAULT_ATTRIBUTE, $sizeModernrugs);
-            $productAdd->setCustomAttribute('gs1', $variable['GS1']);
             $productAdd->setCustomAttribute('search_size', $variable['searchSize']);
             $productAdd->setCustomAttribute('alias_size', $variable['aliasSize']);
             $productAdd->setCustomAttribute('search_size_floor', $variable['searchSizeFloor']);
-            $productAdd->setCustomAttribute('shape', $variable['shape']);
             $productAdd->setCustomAttribute('old_price', $variable['oldPrice']);
             $productAdd->setCustomAttribute('sale_modernrugs', $variable['sale']);
             $productAdd->setCustomAttribute('width', $variable['width']);
@@ -569,10 +561,7 @@ class AddToCart
             $productAdd->setCustomAttribute('shipping_height', $variable['shippingHeight']);
             $productAdd->setCustomAttribute('shipping_weight', $variable['shippingWeight']);
             $productAdd->setCustomAttribute('shipping_type', $variable['shippingType']);
-            $productAdd->setCustomAttribute('orig_map', $variable['origMap']);
-            $productAdd->setCustomAttribute('wholesale', $variable['wholesale']);
-            $productAdd->setCustomAttribute('msrp', $variable['MSRP']);
-            $urlImage = $this->getUrlImage($product['image']);
+            $urlImage = $this->getUrlImage($product['picture']);
             if ($urlImage) {
                 $imageType = [
                     "image",
@@ -594,9 +583,9 @@ class AddToCart
         } catch (\Magento\Framework\Exception\LocalizedException $e) {
             $this->logger->error("Create Product Simple error: " . $e->getMessage());
         } catch (\Magento\Framework\Exception\FileSystemException $e) {
-            $this->logger->error("Create Product Simple error: " . $e->getMessage());
+            $this->logger->error("Create Product Simple error1: " . $e->getMessage());
         } catch (\Exception $e) {
-            $this->logger->error("Create Product Simple error: " . $e->getMessage());
+            $this->logger->error("Create Product Simple error2: " . $e->getMessage());
         }
     }
 
@@ -645,11 +634,11 @@ class AddToCart
         } catch (\Magento\Framework\Exception\InputException $e) {
             $this->logger->error("Create customer error: " . $e->getMessage());
         } catch (\Magento\Framework\Exception\LocalizedException $e) {
-            $this->logger->error("Create customer error: " . $e->getMessage());
+            $this->logger->error("Create customer error1: " . $e->getMessage());
         } catch (\Magento\Framework\Exception\State\InputMismatchException $e) {
-            $this->logger->error("Create customer error: " . $e->getMessage());
+            $this->logger->error("Create customer error2: " . $e->getMessage());
         } catch (\Exception $e) {
-            $this->logger->error("Create customer error: " . $e->getMessage());
+            $this->logger->error("Create customer error3: " . $e->getMessage());
         }
     }
 
@@ -706,9 +695,9 @@ class AddToCart
         } catch (\Magento\Framework\Exception\LocalizedException $e) {
             $this->logger->error("Add Product To Quote error: " . $e->getMessage());
         } catch (\Magento\Framework\Exception\NoSuchEntityException $e) {
-            $this->logger->error("Add Product To Quote error: " . $e->getMessage());
+            $this->logger->error("Add Product To Quote error1: " . $e->getMessage());
         } catch (\Exception $e) {
-            $this->logger->error("Add Product To Quote error: " . $e->getMessage());
+            $this->logger->error("Add Product To Quote error2: " . $e->getMessage());
         }
     }
 
