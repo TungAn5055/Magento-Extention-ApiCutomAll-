@@ -68,7 +68,7 @@ class AddToCart
     const DEFAULT_STORE = 1;
     const DEFAULT_ATTRIBUTE = 'size_modernrugs';
     const DEFAULT_URL_BASE = 'https://www.modernrugs.com';
-    const DEFAULT_CATEGORY_ID = ['4', '7', '14'];
+    const DEFAULT_CATEGORY_ID = ['3'];
 
     /**
      * AddToCart constructor.
@@ -475,7 +475,7 @@ class AddToCart
     {
         $this->logger->info("Start createProductConfigurable:" . $product['sku']);
         try {
-            $categoryId = ['4', '7', '14'];
+            $categoryId = self::DEFAULT_CATEGORY_ID;
             $productAdd = $this->productFactory->create();
             $productAdd->setSku($product['sku']);
             $productAdd->setName($product['name']);
