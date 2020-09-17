@@ -346,22 +346,22 @@ class AddToCart
         $this->logger->info("Start createAttribute: ");
         try {
             $listAttributes = [
-                'sizeSku' => 'size_sku',
+//                'sizeSku' => 'size_sku',
                 'size' => self::DEFAULT_ATTRIBUTE,
-                'sale' => 'sale_modernrugs',
-                'searchSize' => 'search_size',
-                'aliasSize' => 'alias_size',
-                'searchSizeFloor' => 'search_size_floor',
-                'oldPrice' => 'old_price',
-                'shippingLength' => 'shipping_length',
-                'shippingWidth' => 'shipping_width',
-                'shippingHeight' => 'shipping_height',
-                'shippingWeight' => 'shipping_weight',
-                'shippingType' => 'shipping_type',
-                'height' => 'height',
-                'length' => 'length',
-                'madeIn' => 'made_in',
-                'material' => 'material',
+//                'sale' => 'sale_modernrugs',
+//                'searchSize' => 'search_size',
+//                'aliasSize' => 'alias_size',
+//                'searchSizeFloor' => 'search_size_floor',
+//                'oldPrice' => 'old_price',
+//                'shippingLength' => 'shipping_length',
+//                'shippingWidth' => 'shipping_width',
+//                'shippingHeight' => 'shipping_height',
+//                'shippingWeight' => 'shipping_weight',
+//                'shippingType' => 'shipping_type',
+//                'height' => 'height',
+//                'length' => 'length',
+//                'madeIn' => 'made_in',
+//                'material' => 'material',
             ];
             // create attribute
             foreach ($listAttributes as $attrCode) {
@@ -455,8 +455,8 @@ class AddToCart
             'is_used_in_grid' => false,
             'is_visible_in_grid' => false,
             'is_filterable_in_grid' => false,
-            "filterable" => true,
-            "is_filterable_in_search" => true,
+            "filterable" => ($attributeCode == self::DEFAULT_ATTRIBUTE) ? true : false,
+            "is_filterable_in_search" => false,
             'visible' => true,
             "is_visible" => true,
             'is_html_allowed_on_front' => ($attributeCode == self::DEFAULT_ATTRIBUTE) ? true : false,
@@ -548,19 +548,19 @@ class AddToCart
             $productAdd->setCategoryIds($categoryId);
             $productAdd->setDescription($product['description']);
             $productAdd->setCustomAttribute(self::DEFAULT_ATTRIBUTE, $sizeModernrugs);
-            $productAdd->setCustomAttribute('search_size', $variable['searchSize']);
-            $productAdd->setCustomAttribute('alias_size', $variable['aliasSize']);
-            $productAdd->setCustomAttribute('search_size_floor', $variable['searchSizeFloor']);
-            $productAdd->setCustomAttribute('old_price', $variable['oldPrice']);
-            $productAdd->setCustomAttribute('sale_modernrugs', $variable['sale']);
-            $productAdd->setCustomAttribute('width', $variable['width']);
-            $productAdd->setCustomAttribute('length', $variable['length']);
-            $productAdd->setCustomAttribute('height', $variable['height']);
-            $productAdd->setCustomAttribute('shipping_length', $variable['shippingLength']);
-            $productAdd->setCustomAttribute('shipping_width', $variable['shippingWidth']);
-            $productAdd->setCustomAttribute('shipping_height', $variable['shippingHeight']);
-            $productAdd->setCustomAttribute('shipping_weight', $variable['shippingWeight']);
-            $productAdd->setCustomAttribute('shipping_type', $variable['shippingType']);
+//            $productAdd->setCustomAttribute('search_size', $variable['searchSize']);
+//            $productAdd->setCustomAttribute('alias_size', $variable['aliasSize']);
+//            $productAdd->setCustomAttribute('search_size_floor', $variable['searchSizeFloor']);
+//            $productAdd->setCustomAttribute('old_price', $variable['oldPrice']);
+//            $productAdd->setCustomAttribute('sale_modernrugs', $variable['sale']);
+//            $productAdd->setCustomAttribute('width', $variable['width']);
+//            $productAdd->setCustomAttribute('length', $variable['length']);
+//            $productAdd->setCustomAttribute('height', $variable['height']);
+//            $productAdd->setCustomAttribute('shipping_length', $variable['shippingLength']);
+//            $productAdd->setCustomAttribute('shipping_width', $variable['shippingWidth']);
+//            $productAdd->setCustomAttribute('shipping_height', $variable['shippingHeight']);
+//            $productAdd->setCustomAttribute('shipping_weight', $variable['shippingWeight']);
+//            $productAdd->setCustomAttribute('shipping_type', $variable['shippingType']);
             $urlImage = $this->getUrlImage($product['picture']);
             if ($urlImage) {
                 $imageType = [
